@@ -9,6 +9,16 @@
 
 #define MAX_CMDLINE_LEN 256
 #define MAX_DIR_LEN 256
+#define MAX_STRUCT_CMDLINE_SIZE 16
+#define MAX_ARGU_SIZE 16
+
+typedef struct Command_line{
+	char *argc[MAX_ARGU_SIZE];
+	int argv;
+	int background; /*0: no; 1: yes*/
+	int input_redir; /*0: no; 1: yes*/
+	int output_redir; /*0: no; 1: yes*/
+} Command_line;
 
 
 /* function prototypes go here... */
@@ -16,8 +26,10 @@ void show_prompt();
 int get_cmd_line(char *cmdline);
 void process_cmd(char *cmdline);
 
+void Command_line_constructor(Command_line *cmd);
+
 void handle_sigchld(int sig);
-int input_arg_handler(char *cmdline, char **argc, char *background);
+int input_arg_handler(char *cmdline, Command_line **all_cmdline);
 void create_child(char *time, char **argc, int argv);
 void create_linux_program_child(char **argc, char *background);
 void change_dir(char *arg_address);
@@ -50,6 +62,15 @@ int main()
 	return 0;
 }
 
+void Command_line_constructor(Command_line *cmd){
+	int i;
+	for(i = 0; i < MAX_ARGU_SIZE; i++) cmd->argc[i] = NULL;
+	cmd->argv = 0;
+	cmd->background = 0;
+	cmd->input_redir = 0;
+	cmd->output_redir = 0;
+}
+
 //reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
 void handle_sigchld(int sig) {
   int saved_errno = errno;
@@ -57,22 +78,35 @@ void handle_sigchld(int sig) {
   errno = saved_errno;
 }
 
-int input_arg_handler(char *cmdline, char **argc, char *background){
+int input_arg_handler(char *cmdline, Command_line **all_cmdline){
     char *token;
-    int argv = 0;
+    int all_cmdline_size = 0;
     token = strtok(cmdline, " \t");
+
+    Command_line *cmd = (Command_line *)malloc(sizeof(Command_line));
+    Command_line_constructor(cmd);
+    all_cmdline[all_cmdline_size++] = cmd;
 
     while(token != NULL){
         if(token[0] == '&'){
-            *background = '&';
+            cmd->background = 1;
+        }else if(strcmp(token, "|") == 0){
+        	cmd = (Command_line *)malloc(sizeof(Command_line));
+        	all_cmdline[all_cmdline_size++] = cmd;
         }else{
-            argc[argv] = (char *) malloc(sizeof(char) * (strlen(token) + 1));
-			strcpy(argc[argv++], token);
+			if(strcmp(token, "<") == 0){
+	        	cmd->input_redir = 1;
+	        }else if(strcmp(token, ">") == 0){
+	        	cmd->output_redir = 1;
+	        }
+
+            cmd->argc[cmd->argv] = (char *) malloc(sizeof(char) * (strlen(token) + 1));
+			strcpy(cmd->argc[cmd->argv++], token);
         }
         token = strtok(NULL, " \t");
     }
 
-    return argv;
+    return all_cmdline_size;
 }
 
 void create_child(char *time, char ** argc, int argv){
@@ -128,11 +162,17 @@ void change_dir(char *arg_address){
 
 void process_cmd(char *cmdline)
 {
-   	char *argc[32] = {NULL}, background = '\0';
-    int i, argv = input_arg_handler(cmdline, argc, &background);
+   	Command_line *all_cmdline[MAX_STRUCT_CMDLINE_SIZE] = {NULL};
+	int i, all_cmdline_size = input_arg_handler(cmdline, all_cmdline);
 
     if(strcmp(argc[0], "exit") == 0){
-    	for(i = 0; i < argv; i++) free(argc[i]);
+    	for(i = 0; i < all_cmdline_size; i++){
+		int j;
+		for(j = 0; j < all_cmdline[i]->argv; j++){
+			free(all_cmdline[i]->argc[j]);
+		}
+		free(all_cmdline[i]);
+	}
         exit(0);
     }else if(strcmp(argc[0], "cd") == 0){
         change_dir(argc[1]);
@@ -143,7 +183,13 @@ void process_cmd(char *cmdline)
     }
 
 
-    for(i = 0; i < argv; i++) free(argc[i]);
+    for(i = 0; i < all_cmdline_size; i++){
+		int j;
+		for(j = 0; j < all_cmdline[i]->argv; j++){
+			free(all_cmdline[i]->argc[j]);
+		}
+		free(all_cmdline[i]);
+	}
 }
 
 

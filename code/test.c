@@ -10,71 +10,104 @@
 
 // remember to close the unused pipefd
 
-
+void input_redir(char *cmd, char * f_name){
+	int input_fd = open("f_name", O_RDONLY);
+	close(0);
+	dup2(input_fd, 0);
+	close(input_fd);
+	execlp("cat", "cat", (char *)NULL);
+}
 
 void test(char **cmd, int *stdin_fd, const int all_cmdline_size){
-	int pipefd[2];
-	pipe(pipefd);
-	
+	int i, prev_in_pipefd = -1, pipefd[2];
 	char c;
-	int i;
 	*stdin_fd = dup(0);
 	pid_t pid;
 
 	for(i = 0; i < all_cmdline_size; i++){
+/*		
+		int j, nr_open_fd = 0;
+		for(j = 0; j < 255; j++){
+			if(fcntl(j, F_GETFD) != -1) nr_open_fd++;
+		}
+		printf("PIteration: %d, nr_open_fd: %d \n", i, nr_open_fd);
+*/
 		pipe(pipefd);
-
-
-
 		pid = fork();
 
-
-
 		if(pid == 0){
-			printf("%d %d\n", fcntl(0, F_GETFD), i);
-			while(read(0, &c, 1) != 0){
-				if(c == ']') break;
-					printf("%c", c);
-				}
-
-			if(fcntl(1, F_GETFD) != -1) close(1);
+			if(prev_in_pipefd != -1) dup2(prev_in_pipefd, 0);
+			
+			close(1);
 			dup2(pipefd[1], 1);
 			close(pipefd[0]);
 
-			execlp(cmd[i], cmd[i], (char *)NULL);
+			execlp(cmd[i], cmd[i], (char *)NULL);			
+		}else if(pid > 0){
+			close(0);
+			dup2(pipefd[0], 0);
+			close(pipefd[1]);
+			wait(0);
+
+			if(prev_in_pipefd != -1) close(prev_in_pipefd);
+/*
+			int k, nr_open_fd2 = 0;
+			for(j = 0; j < 255; j++){
+				if(fcntl(j, F_GETFD) != -1) nr_open_fd2++;
+			}
+			printf("PIteration: %d, nr_open_fd2: %d \n", i, nr_open_fd2);
+
+*/
 		}else{
 
-
-				wait(0);				
-				if(fcntl(0, F_GETFD) != -1) close(0);				 
-				dup2(pipefd[0], 0);
-				close(pipefd[1]);
-				
-				close(pipefd[0]);
-
-				printf("yes\n");
-				
-	
-
-			
 		}
-		
+
+		prev_in_pipefd = pipefd[0];
 	}
 
-
-
-/*
-	while(write(0, &c, 1) != 0){
+	while(read(0, &c, 1) != 0){
 		printf("%c", c);
 	}
-*/
+
+	close(prev_in_pipefd);
+	close(0);
+	dup2(*stdin_fd, 0);
+	close(*stdin_fd);
+	int j, nr_open_fd = 0;
+	/*
+	for(j = 0; j < 255; j++){
+		if(fcntl(j, F_GETFD) != -1) nr_open_fd++;
+	}
+	printf("Iteration: %d, nr_open_fd: %d \n", i, nr_open_fd);
+	*/
+}
+
+void input_redirection(char **argc, char *f_name, char **argu){
+	char *token;
+	int i = 0;
+	while(strcmp(argc[i], "<") != 0){
+		i++;
+	}
+
+
+	strcpy(f_name, argc[i + 1]);
+	//printf("%s, %s\n", argu[0], argu[1]);
+	//printf("%s\n", f_name);
+
+
 }
 
 int main(){
-	char *arg[3] = {"ps", "sort", "less"};
-	int stdin_fd;
-	test(arg, &stdin_fd, 3);
+	char f_name[256], *arr[] = {"less", "<", "hello_world.txt", NULL};
+	char argu[16][256] ;
+	input_redirection(arr, f_name, argu);
 
+	int input_fd = open(f_name, O_RDONLY);
+	close(0);
+	dup2(input_fd, 0);
+	close(input_fd);
+	execvp(argu[0], argu);
+	
 /*	
 	int pipefd[2];
 	char buffer;

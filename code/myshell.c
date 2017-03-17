@@ -5,12 +5,15 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 
 #define MAX_CMDLINE_LEN 256
 #define MAX_DIR_LEN 256
 #define MAX_STRUCT_CMDLINE_SIZE 16
 #define MAX_ARGU_SIZE 16
+
 
 typedef struct Command_line{
 	char *argc[MAX_ARGU_SIZE];
@@ -28,11 +31,18 @@ void process_cmd(char *cmdline);
 
 void Command_line_constructor(Command_line *cmd);
 
+void redirection_argu_handle(Command_line *cmd, char *f_name);
+void input_redirection(Command_line *cmd);
+void output_redirection(Command_line *cmd);
+void multi_pipe(Command_line **all_cmdline, const int all_cmdline_size);
+
 void handle_sigchld(int sig);
 int input_arg_handler(char *cmdline, Command_line **all_cmdline);
 void create_child(char *time, char **argc, int argv);
 void create_linux_program_child(char **argc, char *background);
 void change_dir(char *arg_address);
+
+
 
 /* The main function implementation */
 int main()
@@ -71,6 +81,96 @@ void Command_line_constructor(Command_line *cmd){
 	cmd->output_redir = 0;
 }
 
+void redirection_argu_handle(Command_line *cmd, char *f_name){
+	int index = 0;
+
+	
+		while(1){
+			if(strcmp(cmd->argc[index], "<") == 0 || strcmp(cmd->argc[index], ">") == 0) break;
+			index++;
+		}
+		strcpy(f_name, cmd->argc[index + 1]);
+
+	while(cmd->argc[index] != NULL ){
+		free(cmd->argc[index]);
+		cmd->argc[index++] = NULL;
+	}
+
+}
+
+
+
+void input_redirection(Command_line *cmd){
+	char f_name[MAX_CMDLINE_LEN];
+	redirection_argu_handle(cmd, f_name);
+
+	int input_fd = open(f_name, O_RDONLY);
+	close(0);
+	dup2(input_fd, 0);
+	close(input_fd);
+	execvp(cmd->argc[0], cmd->argc);
+}
+
+void output_redirection(Command_line *cmd){
+	char f_name[MAX_CMDLINE_LEN];
+	redirection_argu_handle(cmd, f_name);
+
+	int output_fd = open(f_name, O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
+	close(1);
+	dup2(output_fd, 1);
+	close(output_fd);
+	execvp(cmd->argc[0], cmd->argc);
+}
+
+void multi_pipe(Command_line **all_cmdline, const int all_cmdline_size){
+	int i, pipefd[2];
+	int prev_in_pipefd = -1, stdin_fd_copy = dup(0);
+	pid_t pid;
+
+	for(i = 0; i < all_cmdline_size; i++){
+		pipe(pipefd);
+		pid = fork();
+
+		if(pid == 0){
+			if(prev_in_pipefd != -1) dup2(prev_in_pipefd, 0);
+			if(i != all_cmdline_size - 1){
+				close(1);
+				dup2(pipefd[1], 1);
+				close(pipefd[0]);
+			}else{
+				close(pipefd[0]);
+				close(pipefd[1]);
+			}
+
+			if(all_cmdline[i]->input_redir == 1 && all_cmdline[i]->output_redir == 0){
+				input_redirection(all_cmdline[i]);
+			}else if(all_cmdline[i]->input_redir == 0 && all_cmdline[i]->output_redir == 1){
+				output_redirection(all_cmdline[i]);
+			}else{	
+				execvp(all_cmdline[i]->argc[0], all_cmdline[i]->argc);
+			}
+			
+		}else if(pid > 0){
+			close(0);
+			dup2(pipefd[0], 0);
+			close(pipefd[1]);
+			waitpid(pid, 0, 0);
+
+			if(prev_in_pipefd != -1) close(prev_in_pipefd);	
+		}else{
+
+		}
+		prev_in_pipefd = pipefd[0];
+	}
+
+	
+
+	close(prev_in_pipefd);
+	close(0);
+	dup2(stdin_fd_copy, 0);
+	close(stdin_fd_copy);
+}
+
 //reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
 void handle_sigchld(int sig) {
   int saved_errno = errno;
@@ -92,6 +192,7 @@ int input_arg_handler(char *cmdline, Command_line **all_cmdline){
             cmd->background = 1;
         }else if(strcmp(token, "|") == 0){
         	cmd = (Command_line *)malloc(sizeof(Command_line));
+        	Command_line_constructor(cmd);
         	all_cmdline[all_cmdline_size++] = cmd;
         }else{
 			if(strcmp(token, "<") == 0){
@@ -165,6 +266,8 @@ void process_cmd(char *cmdline)
    	Command_line *all_cmdline[MAX_STRUCT_CMDLINE_SIZE] = {NULL};
 	int i, all_cmdline_size = input_arg_handler(cmdline, all_cmdline);
 
+	multi_pipe(all_cmdline, all_cmdline_size);
+/*
     if(strcmp(argc[0], "exit") == 0){
     	for(i = 0; i < all_cmdline_size; i++){
 		int j;
@@ -181,15 +284,20 @@ void process_cmd(char *cmdline)
     }else{
         create_linux_program_child(argc, &background);
     }
-
+*/
+	
 
     for(i = 0; i < all_cmdline_size; i++){
 		int j;
+
 		for(j = 0; j < all_cmdline[i]->argv; j++){
+
 			free(all_cmdline[i]->argc[j]);
 		}
 		free(all_cmdline[i]);
+		all_cmdline[i] = NULL;
 	}
+	
 }
 
 

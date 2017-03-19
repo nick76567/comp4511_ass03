@@ -30,7 +30,6 @@ int get_cmd_line(char *cmdline);
 void process_cmd(char *cmdline);
 
 void Command_line_constructor(Command_line *cmd);
-
 void redirection_argu_handle(Command_line *cmd, char *f_name);
 void io_redirection_argu_handle(Command_line *cmd, char *in_f_name, char *out_f_name);
 void input_redirection(Command_line *cmd);
@@ -132,7 +131,9 @@ void input_redirection(Command_line *cmd){
 	close(0);
 	dup2(input_fd, 0);
 	close(input_fd);
-	execvp(cmd->argc[0], cmd->argc);
+	if(execvp(cmd->argc[0], cmd->argc) == -1){
+		_exit(1);	
+	}
 }
 
 void output_redirection(Command_line *cmd){
@@ -143,7 +144,9 @@ void output_redirection(Command_line *cmd){
 	close(1);
 	dup2(output_fd, 1);
 	close(output_fd);
-	execvp(cmd->argc[0], cmd->argc);
+	if(execvp(cmd->argc[0], cmd->argc) == -1){
+		_exit(1);	
+	}
 }
 
 void io_redirection(Command_line *cmd){
@@ -163,8 +166,11 @@ void io_redirection(Command_line *cmd){
 		close(input_fd);
 		close(pipefd[0]);
 		close(pipefd[1]);
-		execvp(cmd->argc[0], cmd->argc);
+		if(execvp(cmd->argc[0], cmd->argc) == -1){
+			_exit(1);	
+		}
 	}else if(pid > 0){
+		int status;
 		int output_fd = open(out_f_name, O_RDWR | O_CREAT, S_IRUSR | S_IRGRP | S_IROTH);
 		char buf;
 		close(0);
@@ -174,20 +180,22 @@ void io_redirection(Command_line *cmd){
 		close(output_fd);
 		close(pipefd[0]);
 		close(pipefd[1]);
-		waitpid(pid, 0, 0);
+		waitpid(pid, &status, 0);
+
+		if(status != 0) _exit(1);
 
 		while(read(0, &buf, 1) != 0){
 			write(1, &buf, 1);
 		}
 
-		exit(0);
+		_exit(0);
 	}else{
 
 	}
 }
 
 void multi_pipe(Command_line **all_cmdline, const int all_cmdline_size){
-	int i, pipefd[2];
+	int i, status, pipefd[2];
 	int prev_in_pipefd = -1, stdin_fd_copy = dup(0);
 	pid_t pid;
 
@@ -213,20 +221,27 @@ void multi_pipe(Command_line **all_cmdline, const int all_cmdline_size){
 			}else if(all_cmdline[i]->input_redir == 1 && all_cmdline[i]->output_redir == 1){
 				io_redirection(all_cmdline[i]);
 			}else{	
-				execvp(all_cmdline[i]->argc[0], all_cmdline[i]->argc);
+				if(execvp(all_cmdline[i]->argc[0], all_cmdline[i]->argc) == -1){
+					_exit(1);
+				}
 			}
 			
 		}else if(pid > 0){
 			close(0);
 			dup2(pipefd[0], 0);
 			close(pipefd[1]);
-			waitpid(pid, 0, 0);
+			waitpid(pid, &status, 0);
 
 			if(prev_in_pipefd != -1) close(prev_in_pipefd);	
 		}else{
 
 		}
 		prev_in_pipefd = pipefd[0];
+
+		if(status != 0){
+			printf("%s: Command not found.\n", all_cmdline[i]->argc[0]);
+			break;
+		} 
 	}
 	
 	close(prev_in_pipefd);

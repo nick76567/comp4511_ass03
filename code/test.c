@@ -101,7 +101,10 @@ void input_redirection( char *f_name){
 }
 */
 int main(){
-	sleep(5);
+	char c;
+	while(read(0, &c, 1) != 0){
+		write(1, &c, 1);
+	}
 	
 /*	
 	int pipefd[2];

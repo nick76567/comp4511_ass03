@@ -81,32 +81,27 @@ void test(char **cmd, int *stdin_fd, const int all_cmdline_size){
 	printf("Iteration: %d, nr_open_fd: %d \n", i, nr_open_fd);
 	*/
 }
-
-void input_redirection(char **argc, char *f_name, char **argu){
+/*
+void input_redirection( char *f_name){
 	char *token;
-	int i = 0;
+	int j, i = 0;
 	while(strcmp(argc[i], "<") != 0){
 		i++;
 	}
 
 
 	strcpy(f_name, argc[i + 1]);
+	for(j = 0; j < i; j++){
+
+	}
 	//printf("%s, %s\n", argu[0], argu[1]);
 	//printf("%s\n", f_name);
 
 
 }
-
+*/
 int main(){
-	char f_name[256], *arr[] = {"less", "<", "hello_world.txt", NULL};
-	char argu[16][256] ;
-	input_redirection(arr, f_name, argu);
-
-	int input_fd = open(f_name, O_RDONLY);
-	close(0);
-	dup2(input_fd, 0);
-	close(input_fd);
-	execvp(argu[0], argu);
+	sleep(5);
 	
 /*	
 	int pipefd[2];

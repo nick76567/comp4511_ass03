@@ -52,6 +52,7 @@ int main()
 		
     // reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
     // sigchld handle register
+	
 	struct sigaction sa;
 	sa.sa_handler = &handle_sigchld;
 	sigemptyset(&sa.sa_mask);
@@ -234,9 +235,8 @@ void multi_pipe(Command_line **all_cmdline, const int all_cmdline_size){
 			if(all_cmdline[i]->background != 1) waitpid(pid, &status, 0);
 
 			if(prev_in_pipefd != -1) close(prev_in_pipefd);	
-		}else{
-
 		}
+
 		prev_in_pipefd = pipefd[0];
 
 		if(status != 0){

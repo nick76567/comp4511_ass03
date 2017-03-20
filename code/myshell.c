@@ -52,6 +52,7 @@ int main()
 		
     // reference: http://www.microhowto.info/howto/reap_zombie_processes_using_a_sigchld_handler.html
     // sigchld handle register
+	
 	struct sigaction sa;
 	sa.sa_handler = &handle_sigchld;
 	sigemptyset(&sa.sa_mask);
@@ -195,7 +196,7 @@ void io_redirection(Command_line *cmd){
 }
 
 void multi_pipe(Command_line **all_cmdline, const int all_cmdline_size){
-	int i, status, pipefd[2];
+	int i, status = 0, pipefd[2];
 	int prev_in_pipefd = -1, stdin_fd_copy = dup(0);
 	pid_t pid;
 
@@ -230,12 +231,12 @@ void multi_pipe(Command_line **all_cmdline, const int all_cmdline_size){
 			close(0);
 			dup2(pipefd[0], 0);
 			close(pipefd[1]);
-			waitpid(pid, &status, 0);
+
+			if(all_cmdline[i]->background != 1) waitpid(pid, &status, 0);
 
 			if(prev_in_pipefd != -1) close(prev_in_pipefd);	
-		}else{
-
 		}
+
 		prev_in_pipefd = pipefd[0];
 
 		if(status != 0){
@@ -358,8 +359,6 @@ void process_cmd(char *cmdline)
         change_dir(all_cmdline[0]->argc[1]);
     }else if(strcmp(all_cmdline[0]->argc[0], "child") == 0){
         create_child(all_cmdline[0]->argc[1], all_cmdline[0]->argc, all_cmdline[0]->argv);
-    }else if(all_cmdline[0]->background == 1){
-    	create_bg_process(all_cmdline[0]->argc);
     }else{
     	multi_pipe(all_cmdline, all_cmdline_size);
     }
